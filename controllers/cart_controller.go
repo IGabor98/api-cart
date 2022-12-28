@@ -49,3 +49,12 @@ func (c *CartController) GetCart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
+
+func (c *CartController) DeleteCart(w http.ResponseWriter, r *http.Request) {
+	cartToken := chi.URLParam(r, "cartToken")
+	err := c.CartRepository.DeleteCart(cartToken)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}

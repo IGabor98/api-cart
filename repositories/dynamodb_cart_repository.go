@@ -148,3 +148,40 @@ func (r *DynamoDBCartRepository) addItem(ctx context.Context, cart *models.Cart,
 
 	return item, nil
 }
+
+func (r *DynamoDBCartRepository) DeleteCart(cartToken string) error {
+	input := &dynamodb.QueryInput{
+		TableName:              aws.String(r.tableName),
+		KeyConditionExpression: aws.String("cart_token = :token"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":token": &types.AttributeValueMemberS{Value: cartToken},
+		},
+	}
+
+	result, err := r.client.Query(context.TODO(), input)
+
+	if err != nil {
+		return err
+	}
+
+	var writeReqs []types.WriteRequest
+
+	for _, item := range result.Items {
+		writeReqs = append(writeReqs, types.WriteRequest{
+			DeleteRequest: &types.DeleteRequest{
+				Key: map[string]types.AttributeValue{
+					"cart_token": &types.AttributeValueMemberS{Value: cartToken},
+					"sk":         &types.AttributeValueMemberS{Value: item["sk"].(*types.AttributeValueMemberS).Value},
+				},
+			}})
+	}
+
+	_, err = r.client.BatchWriteItem(context.TODO(), &dynamodb.BatchWriteItemInput{
+		RequestItems: map[string][]types.WriteRequest{r.tableName: writeReqs}})
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}

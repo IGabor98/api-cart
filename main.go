@@ -23,6 +23,7 @@ func main() {
 	r.Use(middleware.Logger)
 	r.Post("/api/v1/carts/add-item", cartController.AddItem)
 	r.Get("/api/v1/carts/{cartToken}", cartController.GetCart)
+	r.Delete("/api/v1/carts/{cartToken}", cartController.DeleteCart)
 
 	http.ListenAndServe(":3000", r)
 }
