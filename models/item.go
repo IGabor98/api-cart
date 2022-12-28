@@ -3,7 +3,8 @@ package models
 import "github.com/IGabor98/api-cart/models/internal"
 
 type Item struct {
-	ID                     uint64                   `json:"id" dynamodbav:"id"`
+	CartToken              string                   `json:"cart_token" dynamodbav:"cart_token"`
+	SK                     string                   `json:"sk" dynamodbav:"sk"`
 	SearchProductResultID  uint64                   `json:"search_product_result_id" dynamodbav:"search_product_result_id"`
 	SearchCriteria         internal.SearchCriteria  `json:"search_criteria" dynamodbav:"search_criteria"`
 	ProductCode            string                   `json:"product_code" dynamodbav:"product_code"`

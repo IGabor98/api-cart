@@ -36,7 +36,7 @@ func CreateLocalClient() *dynamodb.Client {
 			})),
 		config.WithCredentialsProvider(credentials.StaticCredentialsProvider{
 			Value: aws.Credentials{
-				AccessKeyID: "ch7mlc", SecretAccessKey: "twzq1", SessionToken: "dummy",
+				AccessKeyID: "bmm11p", SecretAccessKey: "pmbrgr", SessionToken: "dummy",
 				Source: "Hard-coded credentials; values are irrelevant for local DynamoDB",
 			},
 		}),

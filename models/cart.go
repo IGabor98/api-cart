@@ -1,11 +1,12 @@
 package models
 
 type Cart struct {
-	Token         string `dynamodbav:"token"`
-	ChannelID     uint64 `dynamodbav:"channel_id"`
-	Status        string `dynamodbav:"status"`
-	Items         []Item `dynamodbav:"items"`
-	RevalidatedAt string `dynamodbav:"revalidated_at"`
-	UpdatedAt     string `dynamodbav:"updated_at"`
-	CreatedAt     string `dynamodbav:"created_at"`
+	Token         string  `json:"token" dynamodbav:"cart_token"`
+	SK            string  `json:"sk" dynamodbav:"sk"`
+	ChannelID     uint64  `json:"channel_id" dynamodbav:"channel_id"`
+	Status        string  `json:"status" dynamodbav:"status"`
+	Items         []*Item `json:"items" dynamodbav:"-"`
+	RevalidatedAt string  `json:"revalidated_at" dynamodbav:"revalidated_at"`
+	UpdatedAt     string  `json:"updated_at" dynamodbav:"updated_at"`
+	CreatedAt     string  `json:"created_at" dynamodbav:"created_at"`
 }

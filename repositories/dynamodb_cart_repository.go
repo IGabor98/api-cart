@@ -5,29 +5,26 @@ import (
 	"github.com/IGabor98/api-cart/models"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
-	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/expression"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/google/uuid"
 	"time"
 )
 
 type DynamoDBCartRepository struct {
-	client *dynamodb.Client
+	client    *dynamodb.Client
+	tableName string
 }
 
 func NewCartRepository(client *dynamodb.Client) *DynamoDBCartRepository {
-	return &DynamoDBCartRepository{client: client}
+	return &DynamoDBCartRepository{client: client, tableName: "carts"}
 }
 
-func (r *DynamoDBCartRepository) AddItemToCart(cartToken string, item models.Item) (models.Cart, error) {
+func (r *DynamoDBCartRepository) AddItemToCart(cartToken string, item *models.Item) (*models.Cart, error) {
 
 	if cartToken == "" {
-		cart := models.Cart{
-			Token: uuid.New().String(),
-			Items: []models.Item{item},
-		}
 
-		return r.createCart(context.TODO(), cart)
+		return r.createCart(context.TODO(), []*models.Item{item})
 	} else {
 		cart, err := r.GetCart(cartToken)
 
@@ -35,92 +32,119 @@ func (r *DynamoDBCartRepository) AddItemToCart(cartToken string, item models.Ite
 			return cart, err
 		}
 
+		item, err = r.addItem(context.TODO(), cart, item)
+
+		if err != nil {
+			return cart, err
+		}
 		cart.Items = append(cart.Items, item)
-		return r.updateCart(context.TODO(), cart)
+
+		return cart, nil
 	}
 
 }
 
-func (r *DynamoDBCartRepository) GetCart(cartToken string) (models.Cart, error) {
-	primaryKey := map[string]string{
-		"token": cartToken}
-
-	pk, err := attributevalue.MarshalMap(primaryKey)
-	if err != nil {
-		return models.Cart{}, err
-	}
-	input := &dynamodb.GetItemInput{
-		Key:       pk,
-		TableName: aws.String("Carts"),
+func (r *DynamoDBCartRepository) GetCart(cartToken string) (*models.Cart, error) {
+	input := &dynamodb.QueryInput{
+		TableName:              aws.String(r.tableName),
+		KeyConditionExpression: aws.String("cart_token = :token"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":token": &types.AttributeValueMemberS{Value: cartToken},
+		},
 	}
 
-	output, err := r.client.GetItem(context.TODO(), input)
+	result, err := r.client.Query(context.TODO(), input)
+
 	if err != nil {
-		panic(err)
+		return &models.Cart{}, err
 	}
 
-	cart := models.Cart{}
-	err = attributevalue.UnmarshalMap(output.Item, &cart)
-	if err != nil {
-		panic(err)
+	cart := &models.Cart{}
+
+	for _, item := range result.Items {
+		if item["sk"].(*types.AttributeValueMemberS).Value == "cart" {
+			err = attributevalue.UnmarshalMap(item, cart)
+			if err != nil {
+				return cart, err
+			}
+		} else {
+			cartItem := &models.Item{}
+			err = attributevalue.UnmarshalMap(item, cartItem)
+			if err != nil {
+				return cart, err
+			}
+			cart.Items = append(cart.Items, cartItem)
+		}
 	}
 
 	return cart, nil
 }
 
-func (r *DynamoDBCartRepository) createCart(ctx context.Context, cart models.Cart) (models.Cart, error) {
+func (r *DynamoDBCartRepository) createCart(ctx context.Context, items []*models.Item) (*models.Cart, error) {
+	var writeReqs []types.WriteRequest
+
+	cart := &models.Cart{
+		Token:     uuid.New().String(),
+		SK:        "cart",
+		Items:     items,
+		CreatedAt: time.Now().String(),
+	}
+
 	putItem, err := attributevalue.MarshalMap(cart)
 	if err != nil {
-		return models.Cart{}, err
+		return &models.Cart{}, err
+	}
+
+	writeReqs = append(writeReqs, types.WriteRequest{
+		PutRequest: &types.PutRequest{
+			Item: putItem,
+		}})
+
+	for _, item := range cart.Items {
+		item.SK = "item:" + uuid.New().String()
+		item.CartToken = cart.Token
+		item.CreatedAt = time.Now().String()
+
+		putItem, err := attributevalue.MarshalMap(item)
+		if err != nil {
+			return &models.Cart{}, err
+		}
+
+		writeReqs = append(writeReqs, types.WriteRequest{
+			PutRequest: &types.PutRequest{
+				Item: putItem,
+			}})
+	}
+
+	_, err = r.client.BatchWriteItem(ctx, &dynamodb.BatchWriteItemInput{
+		RequestItems: map[string][]types.WriteRequest{r.tableName: writeReqs}})
+
+	if err != nil {
+		return &models.Cart{}, err
+	}
+
+	return cart, nil
+}
+
+func (r *DynamoDBCartRepository) addItem(ctx context.Context, cart *models.Cart, item *models.Item) (*models.Item, error) {
+
+	item.CartToken = cart.Token
+	item.SK = "item:" + uuid.New().String()
+
+	putItem, err := attributevalue.MarshalMap(item)
+	if err != nil {
+		return &models.Item{}, err
 	}
 
 	input := &dynamodb.PutItemInput{
-		TableName: aws.String("Carts"),
+		TableName: aws.String(r.tableName),
 		Item:      putItem,
 	}
 
 	_, err = r.client.PutItem(ctx, input)
 	if err != nil {
-		return models.Cart{}, err
+		return &models.Item{}, err
 	}
 
-	return cart, nil
-}
-
-func (r *DynamoDBCartRepository) updateCart(ctx context.Context, cart models.Cart) (models.Cart, error) {
-
-	primaryKey := map[string]string{
-		"token": cart.Token}
-
-	pk, err := attributevalue.MarshalMap(primaryKey)
-	if err != nil {
-		return models.Cart{}, err
-	}
-
-	upd := expression.
-		Set(expression.Name("updated_at"), expression.Value(time.Now())).
-		Set(expression.Name("items"), expression.Value(cart.Items))
-
-	expr, err := expression.NewBuilder().WithUpdate(upd).Build()
-
-	if err != nil {
-		return cart, err
-	}
-
-	input := &dynamodb.UpdateItemInput{
-		TableName:                 aws.String("Carts"),
-		Key:                       pk,
-		ExpressionAttributeNames:  expr.Names(),
-		ExpressionAttributeValues: expr.Values(),
-		UpdateExpression:          expr.Update(),
-	}
-
-	_, err = r.client.UpdateItem(ctx, input)
-
-	if err != nil {
-		return cart, err
-	}
-
-	return cart, nil
-
+	return item, nil
 }

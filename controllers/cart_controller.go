@@ -20,7 +20,7 @@ func (c *CartController) AddItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cart, err := c.CartRepository.AddItemToCart(request.CartToken, request.Item)
+	cart, err := c.CartRepository.AddItemToCart(request.CartToken, &request.Item)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
