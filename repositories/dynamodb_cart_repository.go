@@ -59,7 +59,9 @@ func (r *DynamoDBCartRepository) GetCart(cartToken string) (*models.Cart, error)
 		return &models.Cart{}, err
 	}
 
-	cart := &models.Cart{}
+	cart := &models.Cart{
+		Items: []*models.Item{},
+	}
 
 	for _, item := range result.Items {
 		if item["sk"].(*types.AttributeValueMemberS).Value == "cart" {
@@ -73,11 +75,31 @@ func (r *DynamoDBCartRepository) GetCart(cartToken string) (*models.Cart, error)
 			if err != nil {
 				return cart, err
 			}
+
+			cartItem.ID = item["sk"].(*types.AttributeValueMemberS).Value[5:]
 			cart.Items = append(cart.Items, cartItem)
 		}
 	}
 
 	return cart, nil
+}
+
+func (r *DynamoDBCartRepository) DeleteItemFromCart(cartToken string, itemID string) error {
+	input := &dynamodb.DeleteItemInput{
+		TableName: aws.String(r.tableName),
+		Key: map[string]types.AttributeValue{
+			"cart_token": &types.AttributeValueMemberS{Value: cartToken},
+			"sk":         &types.AttributeValueMemberS{Value: "item:" + itemID},
+		},
+	}
+
+	_, err := r.client.DeleteItem(context.TODO(), input)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (r *DynamoDBCartRepository) createCart(ctx context.Context, items []*models.Item) (*models.Cart, error) {
@@ -101,7 +123,8 @@ func (r *DynamoDBCartRepository) createCart(ctx context.Context, items []*models
 		}})
 
 	for _, item := range cart.Items {
-		item.SK = "item:" + uuid.New().String()
+		item.ID = uuid.New().String()
+		item.SK = "item:" + item.ID
 		item.CartToken = cart.Token
 		item.CreatedAt = time.Now().String()
 
@@ -129,7 +152,8 @@ func (r *DynamoDBCartRepository) createCart(ctx context.Context, items []*models
 func (r *DynamoDBCartRepository) addItem(ctx context.Context, cart *models.Cart, item *models.Item) (*models.Item, error) {
 
 	item.CartToken = cart.Token
-	item.SK = "item:" + uuid.New().String()
+	item.ID = uuid.New().String()
+	item.SK = "item:" + item.ID
 
 	putItem, err := attributevalue.MarshalMap(item)
 	if err != nil {
